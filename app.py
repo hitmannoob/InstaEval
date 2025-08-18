@@ -13,25 +13,35 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 
 api_key = os.getenv("OPENAI_API_KEY")
 
-system_prompt = """You are a domain expert and an educational content creator. Your job is to generate high-quality quiz questions from the provided text content.
+
+
+def get_system_prompt(level, num_questions):
+    difficulty_instructions = {
+        "easy": "Create simple, straightforward questions testing basic recall and understanding.",
+        "medium": "Create moderately challenging questions that test understanding and application of concepts.",
+        "hard": "Create complex questions that require deep analysis, synthesis, and critical thinking."
+    }
+    
+    return f"""You are a domain expert and an educational content creator. Your job is to generate high-quality quiz questions from the provided text content.
 
     Guidelines:
     - Extract key facts, definitions, concepts, or insights from the text.
-    - Create 10 multiple-choice questions (MCQs)
+    - Create exactly {num_questions} multiple-choice questions (MCQs)
+    - Difficulty level: {level.upper()}
+    - {difficulty_instructions.get(level, difficulty_instructions['medium'])}
     - Ensure that each question:
         - Is concise and clearly worded.
         - Has only one correct answer.
-        - Tests understanding, not just recall.
+        - Tests understanding appropriate to the difficulty level.
     - Each question should have exactly 4 options, labeled A, B, C, D.
-    - Adapt to the content type and difficulty level.
     
     Return the questions in the following format:
     [
-    {
+    {{
         "question": "Your question here?",
         "options": ["Option A", "Option B", "Option C", "Option D"],
         "answer": "A"
-    },
+    }},
     ...
     ]"""
 
@@ -73,6 +83,14 @@ def generate_quiz():
     
     url = data.get('url')
     text = data.get('text')
+    level = data.get('level', 'medium')  # Default to medium if not provided
+    num_questions = data.get('numQuestions', 10)  # Default to 10 if not provided
+    
+    # Validate inputs
+    if level not in ['easy', 'medium', 'hard']:
+        level = 'medium'
+    if not isinstance(num_questions, int) or num_questions < 5 or num_questions > 20:
+        num_questions = 10
     
     # Handle YouTube URLs
     if url and 'youtube.com/watch' in url:
@@ -104,7 +122,7 @@ def generate_quiz():
             messages=[
                 {
                     "role": "system",
-                    "content": system_prompt
+                    "content": get_system_prompt(level, num_questions)
                 },
                 {
                     "role": "user",
@@ -115,7 +133,7 @@ def generate_quiz():
         )
         
         quiz_content = completion.choices[0].message.content
-        print(f"Generated quiz successfully")
+        print(f"Generated quiz successfully - Level: {level}, Questions: {num_questions}")
         
         if quiz_content is None:
             return jsonify({"error": "Empty response from AI"}), 500

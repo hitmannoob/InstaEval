@@ -49,6 +49,10 @@ async function loadQuiz() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     console.log("Current tab URL:", tab.url);
     
+    // Get user inputs
+    const level = document.getElementById('level').value;
+    const numQuestions = parseInt(document.getElementById('numQuestions').value);
+    
     // Check if URL is accessible
     if (!tab.url || 
         tab.url.startsWith('chrome://') || 
@@ -56,18 +60,18 @@ async function loadQuiz() {
         tab.url.startsWith('about:') ||
         tab.url.startsWith('edge://') ||
         tab.url.startsWith('brave://')) {
-      document.getElementById("quiz").innerHTML = "❌ Cannot access this page.<br>Please open a website with content.";
+      document.getElementById("quiz").innerHTML = "⚠ Cannot access this page.<br>Please open a website with content.";
       return;
     }
     
     document.getElementById("quiz").innerHTML = "Generating quiz...";
 
-    let requestBody = {};
+    let requestBody = { level: level, numQuestions: numQuestions };
     
     // Check if it's YouTube
     if (tab.url && tab.url.includes('youtube.com/watch')) {
       console.log("Detected YouTube video");
-      requestBody = { url: tab.url };
+      requestBody.url = tab.url;
     } else {
       console.log("Not YouTube, extracting text from page");
       // Extract text from any other website
@@ -76,19 +80,19 @@ async function loadQuiz() {
         console.log("Extracted text response:", response);
         
         if (!response || !response.text) {
-          document.getElementById("quiz").innerHTML = "❌ Could not extract text from this page.<br>Try refreshing the page first.";
+          document.getElementById("quiz").innerHTML = "⚠ Could not extract text from this page.<br>Try refreshing the page first.";
           return;
         }
         
         if (response.text.length < 100) {
-          document.getElementById("quiz").innerHTML = "❌ Not enough text content to generate quiz.";
+          document.getElementById("quiz").innerHTML = "⚠ Not enough text content to generate quiz.";
           return;
         }
         
-        requestBody = { text: response.text };
+        requestBody.text = response.text;
       } catch (msgError) {
         console.error("Message error:", msgError);
-        document.getElementById("quiz").innerHTML = "❌ Cannot access this page.<br>Please refresh the page and try again.";
+        document.getElementById("quiz").innerHTML = "⚠ Cannot access this page.<br>Please refresh the page and try again.";
         return;
       }
     }
@@ -108,7 +112,7 @@ async function loadQuiz() {
     console.log("Quiz data:", data);
 
     if (!data.quiz || data.quiz.length === 0) {
-      document.getElementById("quiz").innerHTML = "❌ No quiz questions generated.";
+      document.getElementById("quiz").innerHTML = "⚠ No quiz questions generated.";
       return;
     }
 
@@ -118,9 +122,9 @@ async function loadQuiz() {
 
   } catch (error) {
     console.error("Error:", error);
-    document.getElementById("quiz").innerHTML = `❌ Error: ${error.message}<br>Make sure Flask server is running`;
+    document.getElementById("quiz").innerHTML = `⚠ Error: ${error.message}<br>Make sure Flask server is running`;
   }
 }
 
-// Load quiz when popup opens
-loadQuiz();
+// Add event listener to generate button
+document.getElementById('generateBtn').addEventListener('click', loadQuiz);
