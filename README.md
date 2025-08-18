@@ -1,4 +1,5 @@
 # InstaEval 
+![Alt Text](./assets/screenshot.jpeg)
 
 > As the way we consume knowledge changes, we should change the way we evaluate ourselves.
 
