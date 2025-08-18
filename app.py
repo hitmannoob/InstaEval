@@ -11,7 +11,7 @@ import json
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-api_key = "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"
+api_key = os.getenv("OPENAI_API_KEY")
 
 system_prompt = """You are a domain expert and an educational content creator. Your job is to generate high-quality quiz questions from the provided text content.
 
