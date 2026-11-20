@@ -52,6 +52,37 @@ def is_youtube_url(url):
     return True
 
 
+def validate_quiz_request(data):
+    """Validate API request data and return normalized fields plus an error."""
+    if not isinstance(data, dict):
+        return None, "Request body must be a JSON object"
+
+    url = data.get("url")
+    text = data.get("text")
+    if url is not None and not isinstance(url, str):
+        return None, "url must be a string"
+    if text is not None and not isinstance(text, str):
+        return None, "text must be a string"
+
+    level = data.get("level", "medium")
+    if not isinstance(level, str) or level not in {"easy", "medium", "hard"}:
+        return None, "level must be easy, medium, or hard"
+
+    num_questions = data.get("numQuestions", 10)
+    if (isinstance(num_questions, bool) or not isinstance(num_questions, int)
+            or not 5 <= num_questions <= 20):
+        return None, "numQuestions must be an integer between 5 and 20"
+
+    normalized_url = url.strip() if url else ""
+    normalized_text = text.strip() if text else ""
+    return {
+        "url": normalized_url or None,
+        "text": normalized_text or None,
+        "level": level,
+        "num_questions": num_questions,
+    }, None
+
+
 def get_system_prompt(level, num_questions):
     """Build the instruction sent to the quiz generation model."""
     difficulty_instructions = {

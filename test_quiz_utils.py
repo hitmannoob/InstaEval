@@ -1,6 +1,11 @@
 import unittest
 
-from quiz_utils import get_system_prompt, get_video_id, is_youtube_url
+from quiz_utils import (
+    get_system_prompt,
+    get_video_id,
+    is_youtube_url,
+    validate_quiz_request,
+)
 
 
 class GetVideoIdTests(unittest.TestCase):
@@ -44,6 +49,52 @@ class SystemPromptTests(unittest.TestCase):
         prompt = get_system_prompt("custom", 5)
         self.assertIn("Difficulty level: CUSTOM", prompt)
         self.assertIn("moderately challenging questions", prompt)
+
+
+class ValidateQuizRequestTests(unittest.TestCase):
+    def test_normalizes_defaults_and_trims_content(self):
+        request, error = validate_quiz_request({"text": "  lesson notes  "})
+
+        self.assertIsNone(error)
+        self.assertEqual(request, {
+            "url": None,
+            "text": "lesson notes",
+            "level": "medium",
+            "num_questions": 10,
+        })
+
+    def test_rejects_non_object_and_wrong_content_types(self):
+        for data, message in (
+            (None, "Request body must be a JSON object"),
+            (["text"], "Request body must be a JSON object"),
+            ({"text": 12}, "text must be a string"),
+            ({"url": 12}, "url must be a string"),
+        ):
+            with self.subTest(data=data):
+                request, error = validate_quiz_request(data)
+                self.assertIsNone(request)
+                self.assertEqual(error, message)
+
+    def test_rejects_invalid_level_and_question_counts(self):
+        for data, message in (
+            ({"level": "expert"}, "level must be easy, medium, or hard"),
+            ({"level": 2}, "level must be easy, medium, or hard"),
+            ({"numQuestions": True}, "numQuestions must be an integer between 5 and 20"),
+            ({"numQuestions": 4}, "numQuestions must be an integer between 5 and 20"),
+            ({"numQuestions": 21}, "numQuestions must be an integer between 5 and 20"),
+            ({"numQuestions": "10"}, "numQuestions must be an integer between 5 and 20"),
+        ):
+            with self.subTest(data=data):
+                request, error = validate_quiz_request(data)
+                self.assertIsNone(request)
+                self.assertEqual(error, message)
+
+    def test_accepts_question_count_boundaries(self):
+        for count in (5, 20):
+            with self.subTest(count=count):
+                request, error = validate_quiz_request({"numQuestions": count})
+                self.assertIsNone(error)
+                self.assertEqual(request["num_questions"], count)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,12 @@ from typing import List
 from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
 import json
-from quiz_utils import get_system_prompt, get_video_id, is_youtube_url
+from quiz_utils import (
+    get_system_prompt,
+    get_video_id,
+    is_youtube_url,
+    validate_quiz_request,
+)
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -24,8 +29,8 @@ class Answer(BaseModel):
     quiz: List[MyModel]
 
 def get_transcript_text(video_url):
-    video_id = get_video_id(video_url)
-    try: 
+    try:
+        video_id = get_video_id(video_url)
         ytt_api = YouTubeTranscriptApi()
         transcript = ytt_api.fetch(video_id)
         full_text = "\n".join([entry.text for entry in transcript])
@@ -39,20 +44,16 @@ def get_transcript_text(video_url):
 def generate_quiz():
     if request.method == "OPTIONS":
         return jsonify({}), 200
-    
-    data = request.get_json()
-    print(f"Received data: {data}")  # Debug log
-    
-    url = data.get('url')
-    text = data.get('text')
-    level = data.get('level', 'medium')  # Default to medium if not provided
-    num_questions = data.get('numQuestions', 10)  # Default to 10 if not provided
-    
-    # Validate inputs
-    if level not in ['easy', 'medium', 'hard']:
-        level = 'medium'
-    if not isinstance(num_questions, int) or num_questions < 5 or num_questions > 20:
-        num_questions = 10
+
+    data = request.get_json(silent=True)
+    validated, validation_error = validate_quiz_request(data)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    url = validated["url"]
+    text = validated["text"]
+    level = validated["level"]
+    num_questions = validated["num_questions"]
     
     # Handle YouTube URLs
     if is_youtube_url(url):
@@ -68,7 +69,6 @@ def generate_quiz():
         content_text = text
     else:
         error_msg = "No URL or text provided"
-        print(f"Error: {error_msg}")
         return jsonify({"error": error_msg}), 400
     
     # Limit text length to avoid token limits
@@ -76,9 +76,11 @@ def generate_quiz():
     if len(content_text) > max_chars:
         content_text = content_text[:max_chars]
     
-    client = OpenAI(api_key=api_key)
-    
+    if not api_key:
+        return jsonify({"error": "OPENAI_API_KEY is not configured"}), 503
+
     try:
+        client = OpenAI(api_key=api_key)
         completion = client.beta.chat.completions.parse(
             model="gpt-4o-mini",
             messages=[
