@@ -74,6 +74,13 @@ The server will start on `http://127.0.0.1:5000`
    - ✅ Green = Correct answer
    - ❌ Red = Wrong answer
 
+## Tests
+
+Run the dependency-free unit tests with:
+```bash
+python3 -m unittest -q
+```
+
 ## Supported Content Types
 
 - **YouTube Videos** (with captions enabled)
