@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS, cross_origin
 import os
 from pydantic import BaseModel
 from typing import List
@@ -7,6 +6,7 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
 import json
 from server_config import debug_mode_enabled
+from api_security import is_allowed_request_origin
 from quiz_utils import (
     get_system_prompt,
     get_video_id,
@@ -15,7 +15,12 @@ from quiz_utils import (
 )
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+
+
+@app.before_request
+def reject_untrusted_origins():
+    if not is_allowed_request_origin(request.headers.get("Origin")):
+        return jsonify({"error": "Requests from this origin are not allowed"}), 403
 
 api_key = os.getenv("OPENAI_API_KEY")
 
@@ -41,7 +46,6 @@ def get_transcript_text(video_url):
         return None
 
 @app.route("/generate_quiz", methods=["POST", "OPTIONS"])
-@cross_origin()
 def generate_quiz():
     if request.method == "OPTIONS":
         return jsonify({}), 200
