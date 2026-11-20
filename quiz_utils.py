@@ -1,5 +1,6 @@
 """Dependency-free helpers shared by InstaEval's API and unit tests."""
 
+import json
 from urllib.parse import parse_qs, urlparse
 
 
@@ -81,6 +82,49 @@ def validate_quiz_request(data):
         "level": level,
         "num_questions": num_questions,
     }, None
+
+
+def validate_generated_quiz(quiz, expected_count):
+    """Validate and normalize the model's MCQs before returning them to clients."""
+    if not isinstance(quiz, list) or len(quiz) != expected_count:
+        return None, "Quiz must contain the requested number of questions"
+
+    validated_questions = []
+    for question in quiz:
+        if not isinstance(question, dict):
+            return None, "Each question must be an object"
+
+        prompt = question.get("question")
+        options = question.get("options")
+        answer = question.get("answer")
+        if not isinstance(prompt, str) or not prompt.strip():
+            return None, "Each question must have non-empty text"
+        if (not isinstance(options, list) or len(options) != 4
+                or any(not isinstance(option, str) or not option.strip() for option in options)):
+            return None, "Each question must have exactly four non-empty text options"
+        if not isinstance(answer, str) or answer.strip().upper() not in {"A", "B", "C", "D"}:
+            return None, "Each answer must be one of A, B, C, or D"
+
+        validated_questions.append({
+            "question": prompt.strip(),
+            "options": [option.strip() for option in options],
+            "answer": answer.strip().upper(),
+        })
+
+    return validated_questions, None
+
+
+def parse_generated_quiz(response_content, expected_count):
+    """Parse a model response and validate its quiz structure and question count."""
+    if not isinstance(response_content, str) or not response_content.strip():
+        return None, "The model returned an empty response"
+    try:
+        response = json.loads(response_content)
+    except json.JSONDecodeError:
+        return None, "The model response was not valid JSON"
+
+    raw_quiz = response.get("quiz") if isinstance(response, dict) else None
+    return validate_generated_quiz(raw_quiz, expected_count)
 
 
 def get_system_prompt(level, num_questions):
