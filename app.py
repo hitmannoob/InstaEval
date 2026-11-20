@@ -6,6 +6,7 @@ from typing import List
 from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
 import json
+from server_config import debug_mode_enabled
 from quiz_utils import (
     get_system_prompt,
     get_video_id,
@@ -110,4 +111,8 @@ def generate_quiz():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    app.run(
+        host='127.0.0.1',
+        port=5000,
+        debug=debug_mode_enabled(os.getenv("FLASK_DEBUG")),
+    )
