@@ -12,31 +12,41 @@
 - **Customizable Difficulty**: Choose between Easy, Medium, or Hard quiz levels
 - **Flexible Question Count**: Generate 5-20 questions based on your preference
 - **Instant Feedback**: Get immediate feedback on your answers with visual indicators
-- **100% Local**: Run entirely on your machine for ultimate data privacy
+- **Locally Hosted**: Run the Flask server and browser extension on your machine
 - **Chrome Extension**: Seamlessly integrates with your browsing experience
 
-##  Installation
+## Installation
 
 ### Prerequisites
-- Python 3.7+
+- Python 3.9+
 - Chrome Browser
 - OpenAI API Key
 
 ### Step 1: Clone the Repository
 ```bash
-git clone https://github.com/yourusername/instaeval.git
-cd instaeval
+git clone https://github.com/hitmannoob/InstaEval.git
+cd InstaEval
 ```
 
 ### Step 2: Install Python Dependencies
 ```bash
-pip install flask flask-cors pydantic youtube-transcript-api openai
+python -m venv .venv
+source .venv/bin/activate  # Windows PowerShell: .venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
 ```
 
 ### Step 3: Set Your OpenAI API Key
-Open `app.py` and replace the API key with your own:
-```python
-api_key = "your-openai-api-key-here"
+The server reads the key from the `OPENAI_API_KEY` environment variable. Do not
+put the key in `app.py` or commit it to the repository.
+
+macOS/Linux:
+```bash
+export OPENAI_API_KEY="your-openai-api-key-here"
+```
+
+Windows PowerShell:
+```powershell
+$env:OPENAI_API_KEY = "your-openai-api-key-here"
 ```
 
 ### Step 4: Start the Flask Server
@@ -80,13 +90,12 @@ python3 -m unittest -q
 - **Educational Content**
 - **Any text-heavy webpage**
 
-## Privacy First
+## Privacy
 
-InstaEval runs entirely locally on your machine:
-- No data is stored on external servers
-- Your content never leaves your computer (except API calls to OpenAI)
-- No tracking or analytics
-- Complete control over your learning data
+The Flask server and browser extension run on your machine. Quiz generation
+sends selected page text or an extracted YouTube transcript to the configured
+OpenAI API. Review the provider's data policy and keep your API key private.
+This project does not add tracking or analytics.
 
 ## Configuration
 
@@ -104,8 +113,9 @@ InstaEval runs entirely locally on your machine:
 
 **Quiz not generating?**
 - Ensure Flask server is running (`python app.py`)
+- Set `OPENAI_API_KEY` in the same terminal before starting the server
 - Check if the website has sufficient text content
-- Verify your OpenAI API key is valid
+- Verify your OpenAI API key is valid and has available API access
 
 **YouTube transcript not working?**
 - Video must have captions enabled
