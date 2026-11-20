@@ -81,6 +81,8 @@ Run the dependency-free unit tests with:
 python3 -m unittest -q
 ```
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the extension and API data flow.
+
 ## Supported Content Types
 
 - **YouTube Videos** (with captions enabled)
