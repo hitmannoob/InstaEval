@@ -5,7 +5,7 @@ from typing import List
 from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
 import json
-from api_security import is_allowed_request_origin
+from api_security import MAX_REQUEST_BYTES, is_allowed_request_origin
 from quiz_utils import (
     get_system_prompt,
     get_video_id,
@@ -14,6 +14,12 @@ from quiz_utils import (
 )
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+
+
+@app.errorhandler(413)
+def request_too_large(_error):
+    return jsonify({"error": "Request body exceeds the 1 MiB limit"}), 413
 
 
 @app.before_request
