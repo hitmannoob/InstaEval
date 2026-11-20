@@ -1,6 +1,6 @@
 import unittest
 
-from api_security import is_allowed_request_origin
+from api_security import MAX_REQUEST_BYTES, is_allowed_request_origin
 
 
 class RequestOriginTests(unittest.TestCase):
@@ -21,6 +21,12 @@ class RequestOriginTests(unittest.TestCase):
         ):
             with self.subTest(origin=origin):
                 self.assertFalse(is_allowed_request_origin(origin))
+
+
+class RequestLimitTests(unittest.TestCase):
+    def test_request_limit_fits_the_extension_text_cap_and_json_escaping(self):
+        max_extension_payload = 50_000 * 6 + 256
+        self.assertGreaterEqual(MAX_REQUEST_BYTES, max_extension_payload)
 
 
 if __name__ == "__main__":

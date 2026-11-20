@@ -1,9 +1,10 @@
-"""Origin policy for the locally hosted API."""
+"""Request limits and origin policy for the locally hosted API."""
 
 import re
 
 
 _CHROME_EXTENSION_ORIGIN = re.compile(r"chrome-extension://[a-p]{32}\Z")
+MAX_REQUEST_BYTES = 1024 * 1024
 
 
 def is_allowed_request_origin(origin):
