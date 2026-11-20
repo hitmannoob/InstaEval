@@ -2,6 +2,7 @@ let currentQuestionIndex = 0;
 let quizData = [];
 let score = 0;
 let answering = false;
+const QUIZ_REQUEST_TIMEOUT_MS = 120000;
 
 function showMessage(message, type = "info") {
   const container = document.getElementById("quiz");
@@ -197,12 +198,25 @@ async function loadQuiz() {
       requestBody.text = response.text;
     }
 
-    const apiResponse = await fetch("http://127.0.0.1:5000/generate_quiz", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
-    });
-    const data = await apiResponse.json().catch(() => ({}));
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), QUIZ_REQUEST_TIMEOUT_MS);
+    let apiResponse;
+    let data;
+    try {
+      apiResponse = await fetch("http://127.0.0.1:5000/generate_quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+      data = await apiResponse.json().catch((error) => {
+        if (controller.signal.aborted) throw error;
+        return {};
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
     if (!apiResponse.ok) {
       throw new Error(data.error || `The server returned an error (${apiResponse.status}).`);
     }
@@ -217,7 +231,11 @@ async function loadQuiz() {
     showQuestion(currentQuestionIndex);
   } catch (error) {
     console.error("Quiz generation failed:", error);
-    showMessage(`${error.message} Make sure the InstaEval server is running.`, "error");
+    if (error.name === "AbortError") {
+      showMessage("Quiz generation timed out. Check the server connection and try again.", "error");
+    } else {
+      showMessage(`${error.message} Make sure the InstaEval server is running.`, "error");
+    }
   } finally {
     generateButton.disabled = false;
     generateButton.textContent = "Generate Quiz";
