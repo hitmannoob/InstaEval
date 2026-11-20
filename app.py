@@ -4,12 +4,12 @@ from pydantic import BaseModel
 from typing import List
 from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
-import json
 from api_security import is_allowed_request_origin
 from quiz_utils import (
     get_system_prompt,
     get_video_id,
     is_youtube_url,
+    parse_generated_quiz,
     validate_quiz_request,
 )
 
@@ -61,7 +61,7 @@ def generate_quiz():
     
     # Handle YouTube URLs
     if is_youtube_url(url):
-        print(f"Processing YouTube URL: {url}")
+        print("Processing YouTube transcript")
         content_text = get_transcript_text(url)
         if not content_text:
             error_msg = "Could not extract YouTube transcript. The video may not have captions enabled or may be restricted."
@@ -104,10 +104,12 @@ def generate_quiz():
         print(f"Generated quiz successfully - Level: {level}, Questions: {num_questions}")
         
         if quiz_content is None:
-            return jsonify({"error": "Empty response from AI"}), 500
-        
-        quiz_json = json.loads(quiz_content)
-        return jsonify({"quiz": quiz_json['quiz']}), 200
+            return jsonify({"error": "AI returned an empty response. Please try again."}), 502
+
+        quiz, validation_error = parse_generated_quiz(quiz_content, num_questions)
+        if validation_error:
+            return jsonify({"error": "AI returned an invalid quiz. Please try again."}), 502
+        return jsonify({"quiz": quiz}), 200
         
     except Exception as e:
         print(f"Error: {e}")

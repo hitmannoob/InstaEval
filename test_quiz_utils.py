@@ -1,9 +1,12 @@
+import json
 import unittest
 
 from quiz_utils import (
     get_system_prompt,
     get_video_id,
     is_youtube_url,
+    parse_generated_quiz,
+    validate_generated_quiz,
     validate_quiz_request,
 )
 
@@ -95,6 +98,67 @@ class ValidateQuizRequestTests(unittest.TestCase):
                 request, error = validate_quiz_request({"numQuestions": count})
                 self.assertIsNone(error)
                 self.assertEqual(request["num_questions"], count)
+
+
+class ValidateGeneratedQuizTests(unittest.TestCase):
+    def setUp(self):
+        self.questions = [
+            {
+                "question": "  First question?  ",
+                "options": [" A ", "B", "C", "D"],
+                "answer": "a",
+            },
+            {
+                "question": "Second question?",
+                "options": ["One", "Two", "Three", "Four"],
+                "answer": "D",
+            },
+        ]
+
+    def test_validates_requested_count_and_normalizes_fields(self):
+        quiz, error = validate_generated_quiz(self.questions, 2)
+
+        self.assertIsNone(error)
+        self.assertEqual(quiz[0], {
+            "question": "First question?",
+            "options": ["A", "B", "C", "D"],
+            "answer": "A",
+        })
+        self.assertEqual(self.questions[0]["answer"], "a")
+
+    def test_rejects_wrong_question_count_and_non_list_responses(self):
+        for response in (None, {}, self.questions[:1], self.questions + [self.questions[0]]):
+            with self.subTest(response=response):
+                quiz, error = validate_generated_quiz(response, 2)
+                self.assertIsNone(quiz)
+                self.assertTrue(error)
+
+    def test_rejects_malformed_question_fields(self):
+        invalid_cases = (
+            {"question": "", "options": ["A", "B", "C", "D"], "answer": "A"},
+            {"question": "Valid?", "options": ["A", "B", "C"], "answer": "A"},
+            {"question": "Valid?", "options": ["A", "B", "C", ""], "answer": "A"},
+            {"question": "Valid?", "options": ["A", "B", "C", "D"], "answer": "E"},
+            {"question": "Valid?", "options": ["A", "B", "C", "D"], "answer": 1},
+            "not a question object",
+        )
+        for invalid_question in invalid_cases:
+            with self.subTest(question=invalid_question):
+                quiz, error = validate_generated_quiz([invalid_question, self.questions[1]], 2)
+                self.assertIsNone(quiz)
+                self.assertTrue(error)
+
+    def test_parses_json_and_rejects_malformed_or_empty_responses(self):
+        valid = '{"quiz": ' + json.dumps(self.questions) + "}"
+        quiz, error = parse_generated_quiz(valid, 2)
+        self.assertIsNone(error)
+        self.assertEqual(len(quiz), 2)
+
+        for response in (None, "", "not json", "[]", '{"quiz": []}'):
+            with self.subTest(response=response):
+                quiz, error = parse_generated_quiz(response, 2)
+                self.assertIsNone(quiz)
+                self.assertTrue(error)
 
 
 if __name__ == "__main__":
