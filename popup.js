@@ -162,7 +162,7 @@ async function loadQuiz() {
     }
 
     const level = document.getElementById("level").value;
-    const numQuestions = Number.parseInt(document.getElementById("numQuestions").value, 10);
+    const numQuestions = Number(document.getElementById("numQuestions").value);
     if (!Number.isInteger(numQuestions) || numQuestions < 5 || numQuestions > 20) {
       showMessage("Choose between 5 and 20 questions.", "error");
       return;
