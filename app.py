@@ -4,9 +4,9 @@ import os
 from pydantic import BaseModel
 from typing import List
 from youtube_transcript_api import YouTubeTranscriptApi
-import re
 from openai import OpenAI
 import json
+from quiz_utils import get_system_prompt, get_video_id, is_youtube_url
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -15,36 +15,6 @@ api_key = os.getenv("OPENAI_API_KEY")
 
 
 
-def get_system_prompt(level, num_questions):
-    difficulty_instructions = {
-        "easy": "Create simple, straightforward questions testing basic recall and understanding.",
-        "medium": "Create moderately challenging questions that test understanding and application of concepts.",
-        "hard": "Create complex questions that require deep analysis, synthesis, and critical thinking."
-    }
-    
-    return f"""You are a domain expert and an educational content creator. Your job is to generate high-quality quiz questions from the provided text content.
-
-    Guidelines:
-    - Extract key facts, definitions, concepts, or insights from the text.
-    - Create exactly {num_questions} multiple-choice questions (MCQs)
-    - Difficulty level: {level.upper()}
-    - {difficulty_instructions.get(level, difficulty_instructions['medium'])}
-    - Ensure that each question:
-        - Is concise and clearly worded.
-        - Has only one correct answer.
-        - Tests understanding appropriate to the difficulty level.
-    - Each question should have exactly 4 options, labeled A, B, C, D.
-    
-    Return the questions in the following format:
-    [
-    {{
-        "question": "Your question here?",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "answer": "A"
-    }},
-    ...
-    ]"""
-
 class MyModel(BaseModel):
     question: str
     options: List[str]
@@ -52,14 +22,6 @@ class MyModel(BaseModel):
 
 class Answer(BaseModel):
     quiz: List[MyModel]
-
-def get_video_id(url):
-    pattern = r"(?:v=|\/)([0-9A-Za-z_-]{11}).*"
-    match = re.search(pattern, url)
-    if match:
-        return match.group(1)
-    else:
-        raise ValueError("Invalid YouTube URL")
 
 def get_transcript_text(video_url):
     video_id = get_video_id(video_url)
@@ -93,7 +55,7 @@ def generate_quiz():
         num_questions = 10
     
     # Handle YouTube URLs
-    if url and 'youtube.com/watch' in url:
+    if is_youtube_url(url):
         print(f"Processing YouTube URL: {url}")
         content_text = get_transcript_text(url)
         if not content_text:
