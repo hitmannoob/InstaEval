@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import List
 from youtube_transcript_api import YouTubeTranscriptApi
 from openai import OpenAI
+from server_config import debug_mode_enabled
 from api_security import is_allowed_request_origin
 from quiz_utils import (
     get_system_prompt,
@@ -116,4 +117,8 @@ def generate_quiz():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    app.run(
+        host='127.0.0.1',
+        port=5000,
+        debug=debug_mode_enabled(os.getenv("FLASK_DEBUG")),
+    )
