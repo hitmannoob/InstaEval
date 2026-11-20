@@ -1,49 +1,36 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS, cross_origin
 import os
 from pydantic import BaseModel
 from typing import List
 from youtube_transcript_api import YouTubeTranscriptApi
-import re
 from openai import OpenAI
-import json
+from server_config import debug_mode_enabled
+from api_security import MAX_REQUEST_BYTES, is_allowed_request_origin
+from quiz_utils import (
+    get_system_prompt,
+    get_video_id,
+    is_youtube_url,
+    parse_generated_quiz,
+    validate_quiz_request,
+)
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+
+
+@app.errorhandler(413)
+def request_too_large(_error):
+    return jsonify({"error": "Request body exceeds the 1 MiB limit"}), 413
+
+
+@app.before_request
+def reject_untrusted_origins():
+    if not is_allowed_request_origin(request.headers.get("Origin")):
+        return jsonify({"error": "Requests from this origin are not allowed"}), 403
 
 api_key = os.getenv("OPENAI_API_KEY")
 
 
-
-def get_system_prompt(level, num_questions):
-    difficulty_instructions = {
-        "easy": "Create simple, straightforward questions testing basic recall and understanding.",
-        "medium": "Create moderately challenging questions that test understanding and application of concepts.",
-        "hard": "Create complex questions that require deep analysis, synthesis, and critical thinking."
-    }
-    
-    return f"""You are a domain expert and an educational content creator. Your job is to generate high-quality quiz questions from the provided text content.
-
-    Guidelines:
-    - Extract key facts, definitions, concepts, or insights from the text.
-    - Create exactly {num_questions} multiple-choice questions (MCQs)
-    - Difficulty level: {level.upper()}
-    - {difficulty_instructions.get(level, difficulty_instructions['medium'])}
-    - Ensure that each question:
-        - Is concise and clearly worded.
-        - Has only one correct answer.
-        - Tests understanding appropriate to the difficulty level.
-    - Each question should have exactly 4 options, labeled A, B, C, D.
-    
-    Return the questions in the following format:
-    [
-    {{
-        "question": "Your question here?",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "answer": "A"
-    }},
-    ...
-    ]"""
 
 class MyModel(BaseModel):
     question: str
@@ -53,48 +40,35 @@ class MyModel(BaseModel):
 class Answer(BaseModel):
     quiz: List[MyModel]
 
-def get_video_id(url):
-    pattern = r"(?:v=|\/)([0-9A-Za-z_-]{11}).*"
-    match = re.search(pattern, url)
-    if match:
-        return match.group(1)
-    else:
-        raise ValueError("Invalid YouTube URL")
-
 def get_transcript_text(video_url):
-    video_id = get_video_id(video_url)
-    try: 
+    try:
+        video_id = get_video_id(video_url)
         ytt_api = YouTubeTranscriptApi()
         transcript = ytt_api.fetch(video_id)
         full_text = "\n".join([entry.text for entry in transcript])
         return full_text
-    except Exception as e:
-        print(f"Transcript extraction error: {str(e)}")
+    except Exception as error:
+        print(f"Transcript extraction failed ({type(error).__name__})")
         return None
 
 @app.route("/generate_quiz", methods=["POST", "OPTIONS"])
-@cross_origin()
 def generate_quiz():
     if request.method == "OPTIONS":
         return jsonify({}), 200
-    
-    data = request.get_json()
-    print(f"Received data: {data}")  # Debug log
-    
-    url = data.get('url')
-    text = data.get('text')
-    level = data.get('level', 'medium')  # Default to medium if not provided
-    num_questions = data.get('numQuestions', 10)  # Default to 10 if not provided
-    
-    # Validate inputs
-    if level not in ['easy', 'medium', 'hard']:
-        level = 'medium'
-    if not isinstance(num_questions, int) or num_questions < 5 or num_questions > 20:
-        num_questions = 10
+
+    data = request.get_json(silent=True)
+    validated, validation_error = validate_quiz_request(data)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    url = validated["url"]
+    text = validated["text"]
+    level = validated["level"]
+    num_questions = validated["num_questions"]
     
     # Handle YouTube URLs
-    if url and 'youtube.com/watch' in url:
-        print(f"Processing YouTube URL: {url}")
+    if is_youtube_url(url):
+        print("Processing YouTube transcript")
         content_text = get_transcript_text(url)
         if not content_text:
             error_msg = "Could not extract YouTube transcript. The video may not have captions enabled or may be restricted."
@@ -106,7 +80,6 @@ def generate_quiz():
         content_text = text
     else:
         error_msg = "No URL or text provided"
-        print(f"Error: {error_msg}")
         return jsonify({"error": error_msg}), 400
     
     # Limit text length to avoid token limits
@@ -114,9 +87,11 @@ def generate_quiz():
     if len(content_text) > max_chars:
         content_text = content_text[:max_chars]
     
-    client = OpenAI(api_key=api_key)
-    
+    if not api_key:
+        return jsonify({"error": "OPENAI_API_KEY is not configured"}), 503
+
     try:
+        client = OpenAI(api_key=api_key)
         completion = client.beta.chat.completions.parse(
             model="gpt-4o-mini",
             messages=[
@@ -136,14 +111,20 @@ def generate_quiz():
         print(f"Generated quiz successfully - Level: {level}, Questions: {num_questions}")
         
         if quiz_content is None:
-            return jsonify({"error": "Empty response from AI"}), 500
+            return jsonify({"error": "AI returned an empty response. Please try again."}), 502
+
+        quiz, validation_error = parse_generated_quiz(quiz_content, num_questions)
+        if validation_error:
+            return jsonify({"error": "AI returned an invalid quiz. Please try again."}), 502
+        return jsonify({"quiz": quiz}), 200
         
-        quiz_json = json.loads(quiz_content)
-        return jsonify({"quiz": quiz_json['quiz']}), 200
-        
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"error": str(e)}), 500
+    except Exception as error:
+        print(f"Quiz generation failed ({type(error).__name__})")
+        return jsonify({"error": "Quiz generation failed. Please try again."}), 502
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=True)
+    app.run(
+        host='127.0.0.1',
+        port=5000,
+        debug=debug_mode_enabled(os.getenv("FLASK_DEBUG")),
+    )

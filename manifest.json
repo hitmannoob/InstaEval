@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "InstaQuiz",
+  "name": "InstaEval",
+  "description": "Turn webpages and YouTube videos into quick interactive quizzes.",
   "version": "1.0",
-  "permissions": ["scripting", "activeTab"],
+  "permissions": ["activeTab"],
   "host_permissions": [
     "http://127.0.0.1:5000/*",
-    "http://localhost:5000/*",
     "<all_urls>"
   ],
   "content_scripts": [

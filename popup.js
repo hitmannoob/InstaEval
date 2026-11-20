@@ -1,130 +1,245 @@
 let currentQuestionIndex = 0;
 let quizData = [];
+let score = 0;
+let answering = false;
+const QUIZ_REQUEST_TIMEOUT_MS = 120000;
+
+function showMessage(message, type = "info") {
+  const container = document.getElementById("quiz");
+  const messageElement = document.createElement("p");
+  messageElement.className = `message ${type}`;
+  messageElement.textContent = message;
+  container.replaceChildren(messageElement);
+}
+
+function isValidQuiz(questions) {
+  return Array.isArray(questions) && questions.length > 0 && questions.every((question) =>
+    question &&
+    typeof question.question === "string" &&
+    question.question.trim() &&
+    Array.isArray(question.options) &&
+    question.options.length === 4 &&
+    question.options.every((option) => typeof option === "string" && option.trim()) &&
+    typeof question.answer === "string" &&
+    /^[A-D]$/i.test(question.answer)
+  );
+}
+
+function createTextElement(tagName, className, text) {
+  const element = document.createElement(tagName);
+  if (className) element.className = className;
+  element.textContent = text;
+  return element;
+}
 
 function showQuestion(index) {
-  const container = document.getElementById("quiz");
-
-  if (!quizData || index >= quizData.length || !quizData[index]) {
-    container.innerHTML = `<div>Quiz completed!</div>`;
+  if (index >= quizData.length) {
+    showResults();
     return;
   }
 
-  const questionObj = quizData[index];
+  currentQuestionIndex = index;
+  answering = false;
+  const question = quizData[index];
+  const container = document.getElementById("quiz");
+  container.replaceChildren();
 
-  container.innerHTML = `
-    <div class="question">${index + 1}. ${questionObj.question}</div>
-    ${questionObj.options.map((opt, i) =>
-      `<div class="option" data-index="${i}">${String.fromCharCode(65 + i)}. ${opt}</div>`
-    ).join('')}
-  `;
+  const progress = document.createElement("div");
+  progress.className = "progress-row";
+  progress.append(
+    createTextElement("span", "progress-label", `Question ${index + 1} of ${quizData.length}`),
+    createTextElement("span", "score-label", `Score: ${score}`)
+  );
+  container.appendChild(progress);
 
-  document.querySelectorAll('.option').forEach(opt => {
-    opt.addEventListener('click', (e) => {
-      const selected = e.target.getAttribute('data-index');
-      const correctIndex = questionObj.answer.charCodeAt(0) - 65;
+  const progressBar = document.createElement("progress");
+  progressBar.className = "progress-bar";
+  progressBar.max = quizData.length;
+  progressBar.value = index + 1;
+  progressBar.setAttribute("aria-label", `Question ${index + 1} of ${quizData.length}`);
+  container.appendChild(progressBar);
 
-      if (parseInt(selected) === correctIndex) {
-        e.target.classList.add('correct');
-        setTimeout(() => nextQuestion(), 1000);
-      } else {
-        e.target.classList.add('wrong');
-        document.querySelectorAll('.option')[correctIndex].classList.add('correct');
-        setTimeout(() => nextQuestion(), 2500);
-      }
-    });
+  container.appendChild(createTextElement("h2", "question", question.question));
+
+  const options = document.createElement("div");
+  options.className = "options";
+  question.options.forEach((option, optionIndex) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "option";
+    button.append(
+      createTextElement("span", "option-letter", `${String.fromCharCode(65 + optionIndex)}.`),
+      createTextElement("span", "option-text", option)
+    );
+    button.addEventListener("click", () => selectAnswer(button, optionIndex, question, options));
+    options.appendChild(button);
   });
+  container.appendChild(options);
+  options.querySelector("button")?.focus();
 }
 
-function nextQuestion() {
-  currentQuestionIndex++;
-  if (currentQuestionIndex < quizData.length) {
-    showQuestion(currentQuestionIndex);
-  } else {
-    document.getElementById("quiz").innerHTML = `<div>🎉 Quiz completed!</div>`;
+function selectAnswer(selectedButton, selectedIndex, question, options) {
+  if (answering) return;
+  answering = true;
+
+  const buttons = Array.from(options.querySelectorAll("button"));
+  buttons.forEach((button) => {
+    button.disabled = true;
+  });
+
+  const correctIndex = question.answer.toUpperCase().charCodeAt(0) - 65;
+  const correct = selectedIndex === correctIndex;
+  if (correct) score++;
+  selectedButton.classList.add(correct ? "correct" : "wrong");
+  buttons[correctIndex].classList.add("correct");
+
+  const container = document.getElementById("quiz");
+  const feedback = createTextElement(
+    "p",
+    `feedback ${correct ? "feedback-correct" : "feedback-wrong"}`,
+    correct ? "Correct!" : `Not quite. The correct answer is ${String.fromCharCode(65 + correctIndex)}.`
+  );
+  feedback.setAttribute("role", "status");
+
+  const nextButton = document.createElement("button");
+  nextButton.type = "button";
+  nextButton.className = "primary-button next-button";
+  nextButton.textContent = currentQuestionIndex === quizData.length - 1 ? "See results" : "Next question";
+  nextButton.addEventListener("click", () => showQuestion(currentQuestionIndex + 1));
+  container.append(feedback, nextButton);
+  nextButton.focus();
+}
+
+function showResults() {
+  const container = document.getElementById("quiz");
+  const percentage = Math.round((score / quizData.length) * 100);
+  container.replaceChildren(
+    createTextElement("p", "results-kicker", "Quiz complete"),
+    createTextElement("h2", "results-title", "Nice work!"),
+    createTextElement("p", "results-score", `${score} of ${quizData.length} correct`),
+    createTextElement("p", "results-detail", `${percentage}% score`)
+  );
+
+  const retryButton = document.createElement("button");
+  retryButton.type = "button";
+  retryButton.className = "primary-button retry-button";
+  retryButton.textContent = "Generate another quiz";
+  retryButton.addEventListener("click", loadQuiz);
+  container.appendChild(retryButton);
+}
+
+function isYouTubeVideoUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    const youtubeHosts = [
+      "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com",
+      "youtube-nocookie.com", "www.youtube-nocookie.com", "youtu.be", "www.youtu.be"
+    ];
+    if (!youtubeHosts.includes(host)) return false;
+
+    const videoId = host === "youtu.be" || host === "www.youtu.be"
+      ? url.pathname.split("/").filter(Boolean)[0]
+      : url.pathname === "/watch"
+        ? url.searchParams.get("v")
+        : url.pathname.match(/^\/(?:embed|shorts|live|v)\/([\w-]{11})(?:\/|$)/)?.[1];
+    return typeof videoId === "string" && /^[\w-]{11}$/.test(videoId);
+  } catch {
+    return false;
   }
 }
 
 async function loadQuiz() {
+  const generateButton = document.getElementById("generateBtn");
+  generateButton.disabled = true;
+  generateButton.textContent = "Generating…";
+  showMessage("Preparing your quiz…");
+
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    console.log("Current tab URL:", tab.url);
-    
-    // Get user inputs
-    const level = document.getElementById('level').value;
-    const numQuestions = parseInt(document.getElementById('numQuestions').value);
-    
-    // Check if URL is accessible
-    if (!tab.url || 
-        tab.url.startsWith('chrome://') || 
-        tab.url.startsWith('chrome-extension://') || 
-        tab.url.startsWith('about:') ||
-        tab.url.startsWith('edge://') ||
-        tab.url.startsWith('brave://')) {
-      document.getElementById("quiz").innerHTML = "⚠ Cannot access this page.<br>Please open a website with content.";
+    if (!tab || !tab.url) {
+      showMessage("Could not read the current tab. Open a webpage and try again.", "error");
       return;
     }
-    
-    document.getElementById("quiz").innerHTML = "Generating quiz...";
 
-    let requestBody = { level: level, numQuestions: numQuestions };
-    
-    // Check if it's YouTube
-    if (tab.url && tab.url.includes('youtube.com/watch')) {
-      console.log("Detected YouTube video");
+    const level = document.getElementById("level").value;
+    const numQuestions = Number(document.getElementById("numQuestions").value);
+    if (!Number.isInteger(numQuestions) || numQuestions < 5 || numQuestions > 20) {
+      showMessage("Choose between 5 and 20 questions.", "error");
+      return;
+    }
+
+    const url = new URL(tab.url);
+    if (!["http:", "https:"].includes(url.protocol)) {
+      showMessage("Cannot access this page. Open a website with content and try again.", "error");
+      return;
+    }
+
+    const requestBody = { level, numQuestions };
+    if (isYouTubeVideoUrl(tab.url)) {
       requestBody.url = tab.url;
     } else {
-      console.log("Not YouTube, extracting text from page");
-      // Extract text from any other website
+      let response;
       try {
-        const response = await chrome.tabs.sendMessage(tab.id, { action: "extractText" });
-        console.log("Extracted text response:", response);
-        
-        if (!response || !response.text) {
-          document.getElementById("quiz").innerHTML = "⚠ Could not extract text from this page.<br>Try refreshing the page first.";
-          return;
-        }
-        
-        if (response.text.length < 100) {
-          document.getElementById("quiz").innerHTML = "⚠ Not enough text content to generate quiz.";
-          return;
-        }
-        
-        requestBody.text = response.text;
-      } catch (msgError) {
-        console.error("Message error:", msgError);
-        document.getElementById("quiz").innerHTML = "⚠ Cannot access this page.<br>Please refresh the page and try again.";
+        response = await chrome.tabs.sendMessage(tab.id, { action: "extractText" });
+      } catch {
+        showMessage("Cannot read this page. Refresh it and try again.", "error");
         return;
       }
+
+      if (!response || typeof response.text !== "string" || !response.text.trim()) {
+        showMessage("Could not extract text from this page. Try refreshing it first.", "error");
+        return;
+      }
+      if (response.text.trim().length < 100) {
+        showMessage("There is not enough text on this page to make a quiz.", "error");
+        return;
+      }
+      requestBody.text = response.text;
     }
 
-    console.log("Sending request with body:", requestBody);
-    const apiResponse = await fetch("http://127.0.0.1:5000/generate_quiz", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), QUIZ_REQUEST_TIMEOUT_MS);
+    let apiResponse;
+    let data;
+    try {
+      apiResponse = await fetch("http://127.0.0.1:5000/generate_quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+      data = await apiResponse.json().catch((error) => {
+        if (controller.signal.aborted) throw error;
+        return {};
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!apiResponse.ok) {
-      throw new Error(`HTTP error! status: ${apiResponse.status}`);
+      throw new Error(data.error || `The server returned an error (${apiResponse.status}).`);
     }
-
-    const data = await apiResponse.json();
-    console.log("Quiz data:", data);
-
-    if (!data.quiz || data.quiz.length === 0) {
-      document.getElementById("quiz").innerHTML = "⚠ No quiz questions generated.";
+    if (!isValidQuiz(data.quiz)) {
+      showMessage("The server returned an invalid quiz. Please try again.", "error");
       return;
     }
 
     quizData = data.quiz;
     currentQuestionIndex = 0;
+    score = 0;
     showQuestion(currentQuestionIndex);
-
   } catch (error) {
-    console.error("Error:", error);
-    document.getElementById("quiz").innerHTML = `⚠ Error: ${error.message}<br>Make sure Flask server is running`;
+    console.error("Quiz generation failed:", error);
+    if (error.name === "AbortError") {
+      showMessage("Quiz generation timed out. Check the server connection and try again.", "error");
+    } else {
+      showMessage(`${error.message} Make sure the InstaEval server is running.`, "error");
+    }
+  } finally {
+    generateButton.disabled = false;
+    generateButton.textContent = "Generate Quiz";
   }
 }
 
-// Add event listener to generate button
-document.getElementById('generateBtn').addEventListener('click', loadQuiz);
+document.getElementById("generateBtn").addEventListener("click", loadQuiz);
