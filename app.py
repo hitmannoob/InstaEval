@@ -47,8 +47,8 @@ def get_transcript_text(video_url):
         transcript = ytt_api.fetch(video_id)
         full_text = "\n".join([entry.text for entry in transcript])
         return full_text
-    except Exception as e:
-        print(f"Transcript extraction error: {str(e)}")
+    except Exception as error:
+        print(f"Transcript extraction failed ({type(error).__name__})")
         return None
 
 @app.route("/generate_quiz", methods=["POST", "OPTIONS"])
@@ -118,9 +118,9 @@ def generate_quiz():
             return jsonify({"error": "AI returned an invalid quiz. Please try again."}), 502
         return jsonify({"quiz": quiz}), 200
         
-    except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"error": str(e)}), 500
+    except Exception as error:
+        print(f"Quiz generation failed ({type(error).__name__})")
+        return jsonify({"error": "Quiz generation failed. Please try again."}), 502
 
 if __name__ == '__main__':
     app.run(
